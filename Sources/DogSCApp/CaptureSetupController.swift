@@ -151,26 +151,15 @@ final class CaptureSetupSelectorPresenter: CaptureSetupSelectorPresenting {
     }
 
     func beginRecordingPresentation(configuration: CaptureConfiguration) {
-        displaySelector.stop(preservingRetiringPanels: true)
+        // Selection UI ends at confirmation. Recording never draws a border
+        // or dims other windows/displays, including area capture.
+        displaySelector.stop()
+        windowSelector.stop()
         deviceSelector.stop()
-        if configuration.source == .window,
-           let windowID = configuration.windowID {
-            windowSelector.lockSelectionForRecording(windowID: windowID)
-        } else {
-            windowSelector.stop()
-        }
-        // 关闭选择器窗口（不触发取消回调），录制蒙版接管显示：确认选区后
-        // 选框连续存在，不会等到录制开始才重新出现。
+        // Dismiss without a cancellation callback: cancelling here could
+        // revoke the confirmed area while its recording is being prepared.
         areaSelector.dismissWithoutCompleting()
-        if configuration.source == .area,
-           let selection = configuration.area {
-            areaSelector.showRecordingOverlay(
-                selection: selection,
-                on: configuration.displayID
-            )
-        } else {
-            areaSelector.hideRecordingOverlay()
-        }
+        areaSelector.hideRecordingOverlay()
     }
 
     func updateWindowRecordingGeometry(_ geometry: CaptureWindowGeometry?) {
@@ -212,7 +201,7 @@ final class CaptureSetupController: ObservableObject {
     @Published private(set) var availableScreenDevices: [CaptureDeviceInfo]
     @Published private(set) var isRefreshingWindows = false
     @Published private(set) var readiness: CaptureReadiness
-    @Published private(set) var automaticallyCreatesZooms = true
+    var automaticallyCreatesZooms: Bool { AppPreferences.automaticMotionEnabled }
 
     var onStartRequested: (() -> Void)?
     var onError: ((String?) -> Void)?
@@ -435,15 +424,21 @@ final class CaptureSetupController: ObservableObject {
         return selectedID
     }
 
-    func makeRecordingPlan(pointerCaptureFrame: CGRect) throws -> RecordingPlan {
+    func makeRecordingPlan(pointerCaptureFrame: CGRect, replayDuration: TimeInterval? = nil) throws -> RecordingPlan {
         guard let target else {
             throw RecordingPlanError.targetDoesNotMatchConfiguration
         }
+        var capture = configuration
+        if replayDuration != nil {
+            guard capture.source != .device else { throw ScreenRecorderError.unsupportedSource }
+            capture.recordsCamera = false
+            capture.recordsMicrophone = false
+            capture.captureCodec = .h264
+        }
         return try RecordingPlan(
-            target: target,
-            configuration: configuration,
-            pointerCaptureFrame: pointerCaptureFrame,
-            automaticallyCreatesZooms: automaticallyCreatesZooms
+            target: target, configuration: capture, pointerCaptureFrame: pointerCaptureFrame,
+            automaticallyCreatesZooms: replayDuration == nil && automaticallyCreatesZooms,
+            replayDuration: replayDuration
         )
     }
 

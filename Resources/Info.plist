@@ -27,14 +27,16 @@
 	<string>0.1.7</string>
     <key>CFBundleVersion</key>
     <string>18</string>
+    <key>DogSCCustomBuild</key>
+    <true/>
     <key>SUFeedURL</key>
     <string>https://github.com/laogou717/dogsc/releases/latest/download/appcast.xml</string>
     <key>SUPublicEDKey</key>
     <string>LqNJ1F91KtaIFru6eJ62fL9QnGrXt0gOCUEe1bAd9OQ=</string>
     <key>SUEnableAutomaticChecks</key>
-    <true/>
+    <false/>
     <key>SUAllowsAutomaticUpdates</key>
-    <true/>
+    <false/>
     <key>SUAutomaticallyUpdate</key>
     <false/>
     <key>SUScheduledCheckInterval</key>

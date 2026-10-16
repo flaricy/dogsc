@@ -659,7 +659,7 @@ private final class WindowSelectionOverlayView: NSView {
         wantsLayer = true
         dimmingLayer.fillRule = .evenOdd
         outlineLayer.fillColor = nil
-        outlineLayer.strokeColor = captureSelectionAccentNSColor.withAlphaComponent(0.95).cgColor
+        outlineLayer.strokeColor = NSColor.clear.cgColor
         layer?.addSublayer(dimmingLayer)
         layer?.addSublayer(outlineLayer)
         card.wantsLayer = true
@@ -864,7 +864,7 @@ private final class WindowSelectionOverlayView: NSView {
         CATransaction.setDisableActions(true)
         dimmingLayer.frame = bounds
         dimmingLayer.path = maskPath
-        dimmingLayer.fillColor = NSColor.black.withAlphaComponent(recordingHighlight ? 0.58 : 0.42).cgColor
+        dimmingLayer.fillColor = NSColor.clear.cgColor
         outlineLayer.frame = bounds
         outlineLayer.path = borderPath
         outlineLayer.lineWidth = lineWidth

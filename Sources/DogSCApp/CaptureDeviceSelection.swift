@@ -282,7 +282,7 @@ private struct IOSDeviceSelectionOverlay: View {
             visibleFrame: visibleFrame
         )
         ZStack {
-            Color.black.opacity(0.26)
+            Color.clear
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
                     Text("选择要录制的设备").font(.appUI(size: 15, weight: .semibold))

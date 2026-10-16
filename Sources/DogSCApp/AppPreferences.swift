@@ -312,6 +312,15 @@ extension Notification.Name {
 }
 
 enum AppPreferences {
+    static let automaticMotionEnabledKey = "recording.automaticMotionEnabled"
+    static let gameReplayMinutesKey = "recording.gameReplayMinutes"
+    static var automaticMotionEnabled: Bool {
+        UserDefaults.standard.bool(forKey: automaticMotionEnabledKey)
+    }
+    static var gameReplayMinutes: Int {
+        ReplayWindowPolicy.minutes(UserDefaults.standard.integer(forKey: gameReplayMinutesKey))
+    }
+
     private static let applicationLanguagesKey = "AppleLanguages"
     static let appearancePreferenceKey = "app.appearance"
     static let exportCompletionSoundEnabledKey =

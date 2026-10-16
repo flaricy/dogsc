@@ -257,11 +257,11 @@ private struct DisplaySelectionOverlay: View {
         // capsule while the red button was still releasing its own press.
         let shown = arrived
         ZStack(alignment: .bottom) {
-            Color.black.opacity(shown ? (selected ? 0.08 : 0.26) : 0)
+            Color.clear
                 .contentShape(Rectangle())
                 .onTapGesture { if !selected { onSelect() } }
             CaptureViewfinder(inset: shown ? (selected ? 20 : 34) : -80, arm: selected ? 54 : 38)
-                .stroke(.white.opacity(selected ? 1 : 0.62),
+                .stroke(Color.clear,
                         style: StrokeStyle(lineWidth: selected ? 3 : 2, lineCap: .round, lineJoin: .round))
                 .shadow(color: .black.opacity(0.4), radius: 8)
                 .allowsHitTesting(false)

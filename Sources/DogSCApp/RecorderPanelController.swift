@@ -273,6 +273,11 @@ final class DogSCApplicationDelegate: NSObject,
         )
         showApp.target = self
         menu.addItem(showApp)
+        let nextRecording = NSMenuItem(title: appLocalized("新建录制"),
+            action: #selector(startNextRecordingFromStatusItem(_:)), keyEquivalent: "n")
+        nextRecording.target = self
+        nextRecording.isEnabled = canBeginNextRecording
+        menu.addItem(nextRecording)
 
         let recentRoot = NSMenuItem(
             title: appLocalized("最近项目"),
@@ -370,6 +375,10 @@ final class DogSCApplicationDelegate: NSObject,
         )
         quit.target = self
         menu.addItem(quit)
+    }
+
+    @objc private func startNextRecordingFromStatusItem(_ sender: NSMenuItem) {
+        model?.beginNextRecording()
     }
 
     @objc private func showCurrentWindowFromStatusItem(_ sender: NSMenuItem) {
@@ -530,6 +539,13 @@ final class DogSCApplicationDelegate: NSObject,
         guard let fileMenu = mainMenu.items.first(where: {
             $0.identifier == fileMenuIdentifier
         })?.submenu else { return }
+        if !fileMenu.items.contains(where: { $0.action == #selector(startNextRecordingFromStatusItem(_:)) }) {
+            let item = NSMenuItem(title: appLocalized("新建录制"),
+                action: #selector(startNextRecordingFromStatusItem(_:)), keyEquivalent: "n")
+            item.target = self
+            item.keyEquivalentModifierMask = [.command]
+            fileMenu.insertItem(item, at: 0)
+        }
         fileMenu.items.first(where: {
             $0.action == #selector(exportProjectSourceMedia(_:))
         })?.title = appLocalized("导出项目源文件…")
@@ -574,7 +590,14 @@ final class DogSCApplicationDelegate: NSObject,
         WindowCoordinator.activeEditorModel?.importCameraReplacement()
     }
 
+    private var canBeginNextRecording: Bool {
+        guard let model else { return false }
+        return model.phase == .setup || model.phase == .recordingComplete
+            || (model.phase == .editor && !model.exporter.isExporting && !model.isMediaExchangeRunning)
+    }
+
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(startNextRecordingFromStatusItem(_:)) { return canBeginNextRecording }
         if menuItem.action == #selector(openFirstLaunchGuide(_:)) {
             return FirstLaunchGuideAccess.shared.isAvailable
         }

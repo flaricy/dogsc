@@ -61,12 +61,14 @@ struct RecordingPlan: Equatable, Sendable {
     /// windows. Live window geometry belongs to CaptureWindowGeometryRuntime.
     let pointerCaptureFrame: CGRect
     let automaticallyCreatesZooms: Bool
+    let replayDuration: TimeInterval?
 
     init(
         target: CaptureSelectionTarget,
         configuration: CaptureConfiguration,
         pointerCaptureFrame: CGRect,
-        automaticallyCreatesZooms: Bool = true
+        automaticallyCreatesZooms: Bool = false,
+        replayDuration: TimeInterval? = nil
     ) throws {
         let materialized = target.materializing(in: configuration)
         guard materialized == configuration else {
@@ -114,6 +116,7 @@ struct RecordingPlan: Equatable, Sendable {
         self.inputDeviceRequests = inputDeviceRequests
         self.pointerCaptureFrame = pointerCaptureFrame
         self.automaticallyCreatesZooms = automaticallyCreatesZooms
+        self.replayDuration = replayDuration
     }
 
     var primaryRecordingRelativePath: String {
@@ -132,7 +135,7 @@ struct RecordingPlan: Equatable, Sendable {
                 ? ProjectMediaReference(relativePath: "media/camera-0001.mov") : nil,
             microphone: configuration.recordsMicrophone
                 ? ProjectMediaReference(relativePath: "media/microphone.m4a") : nil,
-            pointerEvents: configuration.source == .device
+            pointerEvents: configuration.source == .device || replayDuration != nil
                 ? nil : ProjectMediaReference(relativePath: "events/pointer.jsonl")
         )
     }

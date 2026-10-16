@@ -309,10 +309,14 @@ struct RecordingBar: View {
                     ? "添加录制标记（⌃⌥M）；保存到项目，不会录入画面"
                     : "添加录制标记；全局快捷键不可用，请使用此按钮"))
             RecorderMemoButton(size: 36)
+            if model.isGameReplayRecording {
+                Image(systemName: "gamecontroller.fill").foregroundStyle(RecorderStyle.mint)
+                    .help(String(format: appLocalized("最近 %ld 分钟"), AppPreferences.gameReplayMinutes))
+            }
             recordingActionButton(icon: model.isRecordingPaused ? "play.fill" : "pause.fill",
                 accessibilityLabel: model.isRecordingPaused ? "继续录制" : "暂停录制",
                 accessibilityIdentifier: RecorderAccessibilityID.recordingPauseResume,
-                isEnabled: !model.isPauseTransitioning, action: model.toggleRecordingPause)
+                isEnabled: !model.isPauseTransitioning && !model.isGameReplayRecording, action: model.toggleRecordingPause)
             RecorderPopoverButton(id: "recording-more", title: "更多录制操作", width: 32, height: 36) {
                 Image(systemName: "ellipsis").font(.system(size: 14, weight: .semibold)).foregroundStyle(RecorderStyle.muted)
             } panel: { RecorderActionList(title: "录制操作", items: recordingMenuItems) }

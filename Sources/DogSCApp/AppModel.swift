@@ -376,11 +376,15 @@ final class AppModel: ObservableObject {
     var recorderStartAvailability: RecorderStartAvailability {
         RecorderStartAvailability(
             hasCaptureTarget: captureSetup.canStartRecording,
-            cameraReadiness: cameraReadiness
+            cameraReadiness: gameReplayRequested ? .disabled : cameraReadiness
         )
     }
 
     var canStartRecording: Bool { recorderStartAvailability.permitsRecording }
+
+    @Published var gameReplayRequested = false
+    @Published var lastGameReplayURL: URL?
+    var isGameReplayRecording: Bool { recordingRuns.active?.plan.replayDuration != nil }
 
     func startRecording() {
         guard purpose == .recording, phase == .setup else { return }
@@ -410,7 +414,8 @@ final class AppModel: ObservableObject {
                 pointerCaptureFrame: try pointerCaptureFrame(
                     for: configuration,
                     availableWindows: availableWindows
-                )
+                ),
+                replayDuration: gameReplayRequested ? TimeInterval(AppPreferences.gameReplayMinutes * 60) : nil
             )
             try candidate.validateAvailability(
                 displayIDs: Set(availableDisplays.map(\.id)),
@@ -434,6 +439,7 @@ final class AppModel: ObservableObject {
             refreshRequiredRecordingPermissions()
             return
         }
+        if plan.replayDuration != nil { suspendLiveInputIndicators() }
         resumeLiveInputIndicatorsForRecording(plan: plan)
         var recordingMicrophoneOperation: CaptureDeviceOperationToken?
         if plan.configuration.recordsMicrophone {
@@ -565,7 +571,7 @@ final class AppModel: ObservableObject {
                 // pre-roll against the exact first video PTS and converts its
                 // last position into a non-clicking t=0 seed.
                 let pointerStartedAt: PointerRecordingStart?
-                if plan.configuration.source != .device {
+                if plan.configuration.source != .device && plan.replayDuration == nil {
                     pointerStartedAt = await pointerRecorder.start(
                         frameSource: captureSetup.pointerFrameSource(for: plan)
                     )
@@ -628,7 +634,8 @@ final class AppModel: ObservableObject {
                     } else {
                         try await recorder.start(
                             runID: run.id, configuration: plan.configuration,
-                            outputURL: session.recordingURL(relativePath: plan.primaryRecordingRelativePath)
+                            outputURL: session.recordingURL(relativePath: plan.primaryRecordingRelativePath),
+                            replayDuration: plan.replayDuration
                         )
                         guard recordingRuns.isCurrent(run.id) else { return }
                         recordingRuns.markStarted(.screen, for: run.id)
@@ -753,6 +760,7 @@ final class AppModel: ObservableObject {
         // stop request. Camera/microphone may flush later, but their project
         // references end at this exact host-clock boundary.
         let sharedStopHostTime = CMClockGetTime(CMClockGetHostTimeClock()).seconds
+        recorder.freezeReplay(atHostTime: sharedStopHostTime)
         if var media = project.media {
             if var camera = media.camera,
                let sourceEnd = cameraRecorder.recordedSourceTime(
@@ -818,6 +826,10 @@ final class AppModel: ObservableObject {
                         recordingURL = candidate
                     }
                 }
+            }
+            if run.plan.replayDuration != nil {
+                await completeGameReplay(run: run, warnings: finalizationErrors)
+                return
             }
             let pointerReference = self.project.media?.pointerEvents
             let rawPointerEvents = stopResult.pointerEvents
@@ -1036,6 +1048,7 @@ final class AppModel: ObservableObject {
     }
 
     func toggleRecordingPause() {
+        guard !isGameReplayRecording else { return }
         guard phase == .recording,
               !isPauseTransitioning,
               let run = recordingRuns.active else { return }

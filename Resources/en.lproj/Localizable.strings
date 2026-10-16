@@ -1935,3 +1935,18 @@
 /* Motion multi-selection */
 "批量删除运镜" = "Delete Selected Motion Clips";
 "单击选中；Shift 连选；Command 多选；Delete 批量删除" = "Click to select; Shift-click for a range; Command-click to toggle; Delete to remove selected clips";
+
+/* Personal recording controls */
+"自动跟随运镜（新录制）" = "Automatic Follow Motion (New Recordings)";
+"游戏录屏保留时长" = "Game Replay Length";
+"最近 %ld 分钟" = "Last %ld minutes";
+"游戏录屏" = "Game Recording";
+"仅保留最近一段画面与系统声音，停止后自动保存 MP4。" = "Keep only the latest screen and system audio; save an MP4 automatically on Stop.";
+"不录制摄像头与麦克风；游戏模式不支持暂停。" = "Camera and microphone are excluded; game recording runs continuously without pausing.";
+"保留时长" = "Replay Length";
+"开始游戏录屏" = "Start Game Recording";
+"显示最近的游戏视频" = "Show Latest Game Video";
+"新建录制" = "New Recording";
+"游戏视频保存失败，分段素材已保留" = "Could not save the game video. Segment files have been retained.";
+
+"定制版已禁用官方更新，以保留你的录屏功能修改。" = "Official updates are disabled in this custom build to preserve your recording changes.";

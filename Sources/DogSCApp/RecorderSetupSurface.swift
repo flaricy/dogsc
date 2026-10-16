@@ -9,6 +9,7 @@ struct RecorderSetupSurface: View {
     @ObservedObject var model: AppModel
     @AppStorage("recorder.capture-mode") private var storedMode = CaptureSource.display.rawValue
     @State private var rollsForward = true
+    @AppStorage(AppPreferences.gameReplayMinutesKey) private var replayMinutes = 10
 
     private var mode: CaptureSource {
         model.selectedCaptureSource ?? CaptureSource(rawValue: storedMode) ?? .display
@@ -40,6 +41,31 @@ struct RecorderSetupSurface: View {
             } panel: { RecorderSavePopover(model: model) }
             .firstUseTourTarget("recorder.save", in: .recorder, highlight: .rounded(22))
 
+            RecorderPopoverButton(id: "game-replay", title: "游戏录屏", width: 44, height: 44, panelWidth: 280) {
+                Image(systemName: "gamecontroller.fill")
+                    .font(.system(size: 18)).foregroundStyle(RecorderStyle.mint)
+            } panel: {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("游戏录屏").font(.headline)
+                    Text("仅保留最近一段画面与系统声音，停止后自动保存 MP4。")
+                        .font(.caption).fixedSize(horizontal: false, vertical: true)
+                    Text("不录制摄像头与麦克风；游戏模式不支持暂停。")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Picker("保留时长", selection: $replayMinutes) {
+                        ForEach(ReplayWindowPolicy.minuteOptions, id: \.self) { minutes in
+                            Text(String(format: appLocalized("最近 %ld 分钟"), minutes)).tag(minutes)
+                        }
+                    }
+                    Button("开始游戏录屏") {
+                        RecorderPopoverPresenter.shared.dismiss()
+                        model.gameReplayRequested = true
+                        model.selectCaptureSource(mode == .device ? .display : mode)
+                    }.buttonStyle(.borderedProminent)
+                    if let url = model.lastGameReplayURL {
+                        Button("显示最近的游戏视频") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+                    }
+                }.padding(16)
+            }
             recordButton.padding(.leading, 4)
             RecorderDragGrip()
         }
@@ -80,6 +106,7 @@ struct RecorderSetupSurface: View {
             accessibilityIdentifier: RecorderCaptureSourceAccessibilityID.value(for: mode), isEnabled: true,
             width: 44, height: 44, cornerRadius: 22, highlightOpacity: 0, action: {
                 RecorderPopoverPresenter.shared.dismiss()
+                model.gameReplayRequested = false
                 model.selectCaptureSource(mode)
             }) {
             ZStack {

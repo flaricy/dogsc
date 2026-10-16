@@ -4,9 +4,8 @@ import Sparkle
 
 /// Owns the single Sparkle session for the installed application bundle.
 ///
-/// Local development deliberately uses a different bundle identifier. It may
-/// render the update controls for visual review, but it must never replace
-/// `DogSC Dev.app` with a formal `DogSC.app` release.
+/// Development and custom builds never install an official update over local
+/// changes, including custom builds that retain the installed app's identity.
 @MainActor
 final class AppUpdateController: ObservableObject {
     static let shared = AppUpdateController()
@@ -21,8 +20,12 @@ final class AppUpdateController: ObservableObject {
 
     private init() {}
 
+    var isCustomBuild: Bool {
+        Bundle.main.object(forInfoDictionaryKey: "DogSCCustomBuild") as? Bool == true
+    }
+
     var isFormalRelease: Bool {
-        Bundle.main.bundleIdentifier == Self.formalBundleIdentifier
+        Bundle.main.bundleIdentifier == Self.formalBundleIdentifier && !isCustomBuild
     }
 
     var currentVersionDescription: String {
@@ -36,6 +39,9 @@ final class AppUpdateController: ObservableObject {
     }
 
     var availabilityDescription: String {
+        if isCustomBuild {
+            return "定制版已禁用官方更新，以保留你的录屏功能修改。"
+        }
         if isFormalRelease {
             return automaticallyChecksForUpdates
                 ? "每天自动检查 GitHub Release；发现新版后可直接下载、替换并重新打开。"

@@ -423,7 +423,7 @@ private struct RecordingCompletionCard: View {
                     Task { await model.saveCompletedRecording() }
                 } label: {
                     Text(model.isResolvingCompletedRecording
-                        ? model.recorderTransitionStage.title : appLocalized("保存项目"))
+                        ? model.recorderTransitionStage.title : appLocalized("继续录制"))
                         .lineLimit(1).frame(maxWidth: .infinity)
                 }
                 .buttonStyle(RecorderPillButtonStyle(kind: .soft))

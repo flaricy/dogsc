@@ -1,11 +1,26 @@
 #!/bin/bash
-# Build a complete, locally signed development app from this checkout.
+# Build a complete, locally signed custom app from this checkout.
 set -euo pipefail
 
 cd "$(dirname "$0")"
 project_root="$PWD"
-app_output="$project_root/.build/local/DogSC Dev.app"
+app_name="DogSC Dev"
+bundle_identifier="cn.laogou.dogsc.dev"
+if [[ "${DOGSC_REPLACE_INSTALLED:-0}" == "1" ]]; then
+  app_name="DogSC"
+  bundle_identifier="cn.laogou.dogsc"
+fi
+app_output="$project_root/.build/local/$app_name.app"
 signing_identity="${DOGSC_SIGNING_IDENTITY:-}"
+sign_component() {
+  # Ad-hoc frameworks have no Team ID for hardened library validation.
+  # Avoid empty-array expansion under macOS's Bash 3.2 with nounset enabled.
+  if [[ "$signing_identity" == "-" ]]; then
+    codesign --force --sign "$signing_identity" "$@"
+  else
+    codesign --force --options runtime --sign "$signing_identity" "$@"
+  fi
+}
 
 if [[ -z "${DEVELOPER_DIR:-}" && -d /Applications/Xcode.app/Contents/Developer ]]; then
   export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
@@ -15,12 +30,12 @@ if [[ "$(uname -s)" != Darwin || "$(uname -m)" != arm64 ]]; then
   echo "DogSC currently requires an Apple Silicon Mac." >&2
   exit 1
 fi
-if [[ ! "$signing_identity" =~ ^[[:xdigit:]]{40}$ ]]; then
-  echo "Set DOGSC_SIGNING_IDENTITY to your Apple Development certificate's SHA-1 fingerprint." >&2
+if [[ "$signing_identity" != "-" && ! "$signing_identity" =~ ^[[:xdigit:]]{40}$ ]]; then
+  echo "Set DOGSC_SIGNING_IDENTITY to your certificate SHA-1, or - for a local ad-hoc build." >&2
   echo "List available identities with: security find-identity -v -p codesigning" >&2
   exit 1
 fi
-if ! security find-identity -v -p codesigning | grep -F "$signing_identity" >/dev/null; then
+if [[ "$signing_identity" != "-" ]] && ! security find-identity -v -p codesigning | grep -F "$signing_identity" >/dev/null; then
   echo "The specified signing identity is not available in your keychain." >&2
   exit 1
 fi
@@ -29,20 +44,20 @@ if [[ -e "$app_output" ]] && pgrep -x DogSC >/dev/null; then
   exit 1
 fi
 
-swift build -c release --product DogSC
-binary_dir="$(swift build -c release --show-bin-path)"
+swift build --disable-keychain -c release --product DogSC
+binary_dir="$(swift build --disable-keychain -c release --show-bin-path)"
 sparkle_source="$project_root/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
 [[ -f "$binary_dir/DogSC" && -d "$sparkle_source" ]]
 
 staging_dir="$(mktemp -d "${TMPDIR:-/tmp/}dogsc-build.XXXXXX")"
 trap 'rm -rf "$staging_dir"' EXIT
-app="$staging_dir/DogSC Dev.app"
+app="$staging_dir/$app_name.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Frameworks" "$app/Contents/Resources"
 cp "$binary_dir/DogSC" "$app/Contents/MacOS/DogSC"
 cp Resources/Info.plist "$app/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c 'Set :CFBundleName DogSC Dev' "$app/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName DogSC Dev' "$app/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c 'Set :CFBundleIdentifier cn.laogou.dogsc.dev' "$app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleName $app_name" "$app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $app_name" "$app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_identifier" "$app/Contents/Info.plist"
 cp Resources/AppIcon.icns "$app/Contents/Resources/"
 for resource in en.lproj zh-Hans.lproj Fonts Onboarding Support; do
   ditto "Resources/$resource" "$app/Contents/Resources/$resource"
@@ -68,20 +83,23 @@ ditto "$sparkle_source" "$app/Contents/Frameworks/Sparkle.framework"
 
 framework="$app/Contents/Frameworks/Sparkle.framework"
 framework_version="$framework/Versions/B"
-codesign --force --options runtime --sign "$signing_identity" \
+sign_component \
   "$framework_version/XPCServices/Installer.xpc"
-codesign --force --options runtime --preserve-metadata=entitlements --sign "$signing_identity" \
+sign_component --preserve-metadata=entitlements \
   "$framework_version/XPCServices/Downloader.xpc"
 for component in "$framework_version/Autoupdate" "$framework_version/Updater.app" "$framework"; do
-  codesign --force --options runtime --sign "$signing_identity" "$component"
+  sign_component "$component"
 done
-codesign --force --options runtime --entitlements Resources/DogSC.entitlements \
-  --sign "$signing_identity" "$app"
+sign_component --entitlements Resources/DogSC.entitlements "$app"
 codesign --verify --deep --strict "$app"
 
 signature_details="$(codesign -dvvv "$app" 2>&1)"
-grep -F 'Authority=Apple Development:' <<< "$signature_details" >/dev/null
-grep -F 'flags=0x10000(runtime)' <<< "$signature_details" >/dev/null
+if [[ "$signing_identity" == "-" ]]; then
+  grep -F 'Signature=adhoc' <<< "$signature_details" >/dev/null
+else
+  grep -F 'Authority=Apple Development:' <<< "$signature_details" >/dev/null
+  grep -F 'runtime' <<< "$signature_details" >/dev/null
+fi
 [[ "$(lipo -archs "$app/Contents/MacOS/DogSC")" = arm64 ]]
 otool -l "$app/Contents/MacOS/DogSC" | grep -F '@executable_path/../Frameworks' >/dev/null
 

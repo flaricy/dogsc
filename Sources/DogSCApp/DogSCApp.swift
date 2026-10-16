@@ -486,6 +486,16 @@ enum WindowCoordinator {
         ] as? NSNumber)?.uint32Value
     }
 
+    static func showRecorderBar() {
+        guard let model else { return }
+        guard model.phase == .setup, !model.showsRequiredPermissionGate else {
+            bringCurrentWindowFront()
+            return
+        }
+        recorderPanelController?.present(phase: .setup)
+        recorderPanelController?.bringToFront()
+    }
+
     static func bringCurrentWindowFront() {
         if permissionWindowController?.isManualGuideActive == true {
             permissionWindowController?.bringToFront()

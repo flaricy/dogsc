@@ -35,7 +35,7 @@ final class ScreenRecorder: NSObject, ObservableObject, SCStreamDelegate {
     )
     private var stream: SCStream?
     private var audioStream: SCStream?
-    private var captureOutput: CaptureOutput?
+    private var captureOutput: (any ScreenCaptureWriting)?
     private var nativeRecordingSegment: (any NativeScreenRecordingSegmentProtocol)?
     /// Stored as `AnyObject` so the recorder keeps its pre-macOS-15 deployment
     /// target while conditionally owning the macOS 15 frame monitor.
@@ -71,7 +71,8 @@ final class ScreenRecorder: NSObject, ObservableObject, SCStreamDelegate {
     func start(
         runID: RecordingRunID,
         configuration: CaptureConfiguration,
-        outputURL: URL
+        outputURL: URL,
+        replayDuration: TimeInterval? = nil
     ) async throws {
         let run: ScreenRecorderRunToken
         switch runSafety.begin(runID) {
@@ -81,7 +82,7 @@ final class ScreenRecorder: NSObject, ObservableObject, SCStreamDelegate {
             throw ScreenRecorderError.alreadyActive(activeRunID)
         }
         do {
-            try await performStart(run: run, configuration: configuration, outputURL: outputURL)
+            try await performStart(run: run, configuration: configuration, outputURL: outputURL, replayDuration: replayDuration)
         } catch {
             await rollbackFailedStart(run: run)
             throw error
@@ -91,7 +92,8 @@ final class ScreenRecorder: NSObject, ObservableObject, SCStreamDelegate {
     private func performStart(
         run: ScreenRecorderRunToken,
         configuration: CaptureConfiguration,
-        outputURL: URL
+        outputURL: URL,
+        replayDuration: TimeInterval?
     ) async throws {
         lastSystemAudioDiagnostics = nil
 
@@ -170,7 +172,7 @@ final class ScreenRecorder: NSObject, ObservableObject, SCStreamDelegate {
         }
 
         let useNativeRecordingOutput: Bool
-        if #available(macOS 15.0, *) {
+        if #available(macOS 15.0, *), replayDuration == nil {
             useNativeRecordingOutput = NativeScreenRecordingBackendPolicy
                 .canUseNativeWriter(
                     source: configuration.source,
@@ -241,7 +243,7 @@ final class ScreenRecorder: NSObject, ObservableObject, SCStreamDelegate {
         // Keep the raw recording cursor-free. Pointer positions are recorded on
         // a separate event track and rendered later, so the editor can replace,
         // resize, smooth or hide the cursor without baking it into the video.
-        streamConfiguration.showsCursor = false
+        streamConfiguration.showsCursor = replayDuration != nil
         streamConfiguration.excludesCurrentProcessAudio = true
 
         // Never attach audio to the native recording stream. On this macOS
@@ -250,13 +252,15 @@ final class ScreenRecorder: NSObject, ObservableObject, SCStreamDelegate {
         streamConfiguration.capturesAudio = false
         let stream = SCStream(filter: filter, configuration: streamConfiguration, delegate: self)
 
-        var captureOutput: CaptureOutput?
+        var captureOutput: (any ScreenCaptureWriting)?
         var nativeFrameMonitor: AnyObject?
         var nativeSystemAudioOutput: NativeSystemAudioCaptureOutput?
         var coreAudioSystemAudioTap: AnyObject?
         var needsScreenCaptureKitAudioFallback = false
         if configuration.recordsSystemAudio {
-            if #available(macOS 15.0, *) {
+            if replayDuration != nil {
+                needsScreenCaptureKitAudioFallback = true
+            } else if #available(macOS 15.0, *) {
                 let audioURL = outputURL.deletingLastPathComponent().appendingPathComponent(
                     ".independent-system-audio-\(UUID().uuidString).m4a"
                 )
@@ -311,20 +315,23 @@ final class ScreenRecorder: NSObject, ObservableObject, SCStreamDelegate {
             // stream and writer. Core Audio records system sound independently,
             // so no second ScreenCaptureKit display compositor competes with
             // WindowServer or the 4K VideoToolbox encoder.
-            let created = try CaptureOutput(
-                run: run,
-                outputURL: outputURL,
-                width: encodedDimensions.width,
-                height: encodedDimensions.height,
-                frameRate: configuration.captureFrameRate,
-                codec: configuration.captureCodec,
-                recordsSystemAudio: needsScreenCaptureKitAudioFallback,
-                onTerminalFailure: { [weak self] event in
-                    Task { @MainActor [weak self] in
-                        self?.handleCaptureOutputTerminal(event)
-                    }
-                }
-            )
+            let terminalHandler: @Sendable (CaptureOutputTerminalEvent) -> Void = { [weak self] event in
+                Task { @MainActor [weak self] in self?.handleCaptureOutputTerminal(event) }
+            }
+            let created: any ScreenCaptureWriting
+            if let replayDuration {
+                created = try ReplayCaptureOutput(run: run, outputURL: outputURL,
+                    width: encodedDimensions.width, height: encodedDimensions.height,
+                    frameRate: configuration.captureFrameRate,
+                    recordsSystemAudio: needsScreenCaptureKitAudioFallback,
+                    retention: replayDuration, onTerminalFailure: terminalHandler)
+            } else {
+                created = try CaptureOutput(run: run, outputURL: outputURL,
+                    width: encodedDimensions.width, height: encodedDimensions.height,
+                    frameRate: configuration.captureFrameRate, codec: configuration.captureCodec,
+                    recordsSystemAudio: needsScreenCaptureKitAudioFallback,
+                    onTerminalFailure: terminalHandler)
+            }
             try stream.addStreamOutput(created, type: .screen, sampleHandlerQueue: sampleQueue)
             captureOutput = created
         }
@@ -811,10 +818,15 @@ final class ScreenRecorder: NSObject, ObservableObject, SCStreamDelegate {
         }
     }
 
+    func freezeReplay(atHostTime time: TimeInterval) {
+        (captureOutput as? ReplayCaptureOutput)?.stopAcceptingSamples(atHostTime: time)
+    }
+
     func stop(runID: RecordingRunID) async throws -> URL? {
         guard let stream, let run = runSafety.beginStopping(runID) else {
             throw ScreenRecorderError.runNotActive(runID)
         }
+        freezeReplay(atHostTime: CMClockGetTime(CMClockGetHostTimeClock()).seconds)
         isCapturing = false
         isPaused = false
         editorWindowRefresh.stop(for: runID)

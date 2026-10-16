@@ -11,6 +11,9 @@ import SwiftUI
 /// Where takes and exports land, drawn as a two-step flow, then the three
 /// app-wide preferences as equal tiles.
 struct SettingsGeneralPage: View {
+    @AppStorage(AppPreferences.automaticMotionEnabledKey) private var automaticMotion = false
+    @AppStorage(AppPreferences.gameReplayMinutesKey) private var replayMinutes = 10
+
     let projectsFolder: URL
     let exportFolder: URL
     let fileLocationError: String?
@@ -41,6 +44,16 @@ struct SettingsGeneralPage: View {
                     .transition(.opacity)
             }
 
+            SettingsCaption("录制")
+            Toggle("自动跟随运镜（新录制）", isOn: $automaticMotion)
+                .toggleStyle(.switch)
+                .accessibilityIdentifier("settings.automatic-motion")
+                .padding(8)
+            Picker("游戏录屏保留时长", selection: $replayMinutes) {
+                ForEach(ReplayWindowPolicy.minuteOptions, id: \.self) { minutes in
+                    Text(String(format: appLocalized("最近 %ld 分钟"), minutes)).tag(minutes)
+                }
+            }.padding(8)
             SettingsCaption("偏好")
             HStack(alignment: .top, spacing: 8) {
                 SettingsPreferenceTile(title: "界面语言") {

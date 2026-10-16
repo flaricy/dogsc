@@ -125,7 +125,7 @@ struct RetainedSampleBuffer: @unchecked Sendable {
     let value: CMSampleBuffer
 }
 
-final class CaptureOutput: NSObject, SCStreamOutput, @unchecked Sendable {
+final class CaptureOutput: NSObject, ScreenCaptureWriting, @unchecked Sendable {
     private static let logger = Logger(
         subsystem: "cn.laogou.dogsc",
         category: "screen-recorder"
@@ -405,6 +405,10 @@ final class CaptureOutput: NSObject, SCStreamOutput, @unchecked Sendable {
         didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
         of outputType: SCStreamOutputType
     ) {
+        append(sampleBuffer, of: outputType)
+    }
+
+    func append(_ sampleBuffer: CMSampleBuffer, of outputType: SCStreamOutputType) {
         guard sampleBuffer.isValid else { return }
         switch outputType {
         case .screen:
@@ -808,6 +812,10 @@ final class CaptureOutput: NSObject, SCStreamOutput, @unchecked Sendable {
     private static let finishWritingTimeout: TimeInterval = 15
 
     func finish() async throws -> FrameRateMeasurement? {
+        try await finish(atHostTime: nil)
+    }
+
+    func finish(atHostTime end: TimeInterval?) async throws -> FrameRateMeasurement? {
         let requestedEndWallTime = Date()
         return try await withCheckedThrowingContinuation { continuation in
             writerQueue.async { [self] in
@@ -828,6 +836,12 @@ final class CaptureOutput: NSObject, SCStreamOutput, @unchecked Sendable {
                     writer.cancelWriting()
                     continuation.resume(throwing: ScreenRecorderError.noFrames)
                     return
+                }
+                if let end, let start = sessionStartRawTime, end.isFinite {
+                    let boundary = CMTime(seconds: end, preferredTimescale: 600_000) - start - accumulatedPauseDuration
+                    if boundary > (lastReceivedVideoTime ?? .zero) {
+                        writer.endSession(atSourceTime: boundary)
+                    }
                 }
                 videoInput.markAsFinished()
                 audioInput?.markAsFinished()
